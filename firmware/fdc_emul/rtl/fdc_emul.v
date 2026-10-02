@@ -51,6 +51,7 @@ module fdc_emul (
 reg	[4:0]		r_bdi_ff;
 reg				clk_16 = 1'b0;	// (наше) ~X = X: без начального значения такта нет
 reg				r_drq_r_dreg, r_intrq_r_sreg, r_bdi_drq, r_bdi_drq0, r_bdi_intrq, r_bdi_intrq0;
+wire				rdtrk;	// (наше) идёт Read Track после индекса, см. Main_CTRL.oRDTRK
 wire				vfoe, wg, rawr, rclk, sync, start, byte_2_read, byte_2_write, translate, reset_crc, vg_reset_n,
 					tr43, next_byte, bdi_drq, bdi_intrq, bdi_wr_en, hld, WDATA;
 
@@ -144,6 +145,7 @@ Main_CTRL U14 (
 	.oWG 		( wg ),
 	.oDRQ 	( bdi_drq ),
 	.oINTRQ 	( bdi_intrq ),
+	.oRDTRK	( rdtrk ),	// (наше)
 //
 	.iSYNC			( sync ),
 	.iBYTE_CNT		( byte_cnt ),
@@ -185,7 +187,7 @@ MFMDEC U17 (
 	.iCLK		( clk_16 ),
 	.iRCLK	( rclk ),
 	.iVFOE	( vfoe ),
-	.iSTART	( start ),
+	.iSTART	( start | rdtrk ),	// (наше) Read Track отдаёт и промежутки, как WD1793
 	.iSYNC	( sync ),
 	.i3WORDS	( words ),
 	.oBYTE_2_MAIN	( byte_2_main ),

@@ -24,6 +24,7 @@ output	reg	oWG,
 output 			oDRQ,
 output 			oINTRQ,
 output			oBUSY,		// (наше) разряд ЗАНЯТО прямо из автомата, мимо шины
+output			oRDTRK,		// (наше) идёт Read Track и индекс уже прошёл: декодеру собирать байты и до метки
 //
 output	reg	[3:0]	oIP_CNT,	// счетчик индексных импульсов во время выполнения команд
 input		[7:0]			iBYTE_2_MAIN,
@@ -1302,6 +1303,7 @@ assign oDIRC = rDIRC;
 assign oHLD = rHLD;
 assign oDRQ = rDRQ;
 assign oBUSY = rBUSY;
+assign oRDTRK = ( rCURR_STATE == TYPE3RD ) && rREG_CMD[5] && ( rSTAGE >= 6'd15 ) && ( rSTAGE <= 6'd17 );	// (наше)
 assign oINTRQ = rINTRQ;
 assign oVFOE = ~( rHLD & rHRDY2 & rHEAD_IN_POS & ~oWG );
 assign oTG43 = (rREG_TRK >= 8'd44) ? 1'b1 : 1'b0;
