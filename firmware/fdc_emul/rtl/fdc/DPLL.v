@@ -38,6 +38,7 @@ else
 assign oRAWR = rRDDT1 & rRDDT2 & ~iVFOE;
 //
 
+(* romstyle = "logic" *)   // (наше) Quartus: в логику, а не в M4K -- в реплике на DE1 они все заняты
 reg [7:0] mem[0:63];
 initial begin
   $readmemh ("DPLL.hex", mem, 0);
