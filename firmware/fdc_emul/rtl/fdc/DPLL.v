@@ -19,6 +19,7 @@ reg		[4:0]	w288;
 initial
 begin
 	oRCLK = 1'b0;
+	w288 = 5'd0;	// (наше) индекс в таблицу: без этого mem[{~oRAWR, X}] = X
 end
 //
 always @( posedge iCLK )

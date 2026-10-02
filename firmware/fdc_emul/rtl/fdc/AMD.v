@@ -21,6 +21,8 @@ reg					rRCLK1;
 initial
 begin
 	oSTART = 1'b0;
+	o3WORDS = 48'd0;	// (наше) линия задержки: без этого синхромаркер не ловится
+	rBIT = 1'b0;
 end
 //
 always @( posedge iCLK )

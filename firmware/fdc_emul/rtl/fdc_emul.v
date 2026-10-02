@@ -49,7 +49,8 @@ module fdc_emul (
 );
 
 reg	[4:0]		r_bdi_ff;
-reg				clk_16, r_drq_r_dreg, r_intrq_r_sreg, r_bdi_drq, r_bdi_drq0, r_bdi_intrq, r_bdi_intrq0;
+reg				clk_16 = 1'b0;	// (наше) ~X = X: без начального значения такта нет
+reg				r_drq_r_dreg, r_intrq_r_sreg, r_bdi_drq, r_bdi_drq0, r_bdi_intrq, r_bdi_intrq0;
 wire				vfoe, wg, rawr, rclk, sync, start, byte_2_read, byte_2_write, translate, reset_crc, vg_reset_n,
 					tr43, next_byte, bdi_drq, bdi_intrq, bdi_wr_en, hld, WDATA;
 

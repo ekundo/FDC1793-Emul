@@ -23,6 +23,7 @@ input				iWRPT,
 output	reg	oWG,
 output 			oDRQ,
 output 			oINTRQ,
+output			oBUSY,		// (наше) разряд ЗАНЯТО прямо из автомата, мимо шины
 //
 output	reg	[3:0]	oIP_CNT,	// счетчик индексных импульсов во время выполнения команд
 input		[7:0]			iBYTE_2_MAIN,
@@ -154,6 +155,8 @@ initial
 		rDRQ_R_CMD = 1'b0;
 		rHEAD_IN_POS = 1'b0;
 		oWG = 1'b0;
+		rIPTRG = 1'b0;		// (наше) без этого ~X = X, признак индекса не меняется
+		rIPTRG0 = 1'b0;
 	end
 //
 always @( posedge iCLK )
@@ -1298,6 +1301,7 @@ assign oSTEP = rSTEP_CNT > 0;
 assign oDIRC = rDIRC;
 assign oHLD = rHLD;
 assign oDRQ = rDRQ;
+assign oBUSY = rBUSY;
 assign oINTRQ = rINTRQ;
 assign oVFOE = ~( rHLD & rHRDY2 & rHEAD_IN_POS & ~oWG );
 assign oTG43 = (rREG_TRK >= 8'd44) ? 1'b1 : 1'b0;
