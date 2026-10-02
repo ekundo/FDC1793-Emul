@@ -61,6 +61,7 @@ reg		[7:0]	REG_STA;	// 0
 reg				rBUSY;
 reg				rCRC_ERROR;
 reg				rSEEK_ERROR;
+reg		[5:0]	rDAM_CNT;	// (наше) байтов после CRC поля адреса до метки данных: паспорт -- не больше 43 в MFM
 reg				rLOST_DATA;
 reg				rREC_NOT_FOUND;
 reg				rWRITE_FAULT;
@@ -77,7 +78,7 @@ reg		[7:0]	rREG_SHF;
 reg		[7:0]	rDATA_OUT;
 reg		[7:0]	rDATA_IN;
 reg		[2:0]	rCURR_STATE, rLAST_CURR_STATE;
-reg		[3:0]	rSTEP_CNT;		// (дисководу 3,5" достаточно 0.8 мкс) сейчас 15 тактов
+reg		[6:0]	rSTEP_CNT;		// (наше) 64 такта = 4 мкс: TSTP паспорта на CLK 1 МГц (было 15 тактов, 0,94 мкс)
 reg				rSTEP_SET;		// изменение - загрузка счетчика, иначе - счет
 reg				rSTEP_SET0;
 reg		[10:0]	rPREDELAY_CNT;	// 2048 тактов iCLK (предделитель)
@@ -128,7 +129,7 @@ initial
 		rRESETn2 = 1'b0;
 		rIP1 = 1'b0;
 		rIP2 = 1'b1;
-		rSTEP_CNT = 4'b0;
+		rSTEP_CNT = 7'b0;
 		rDELAY_CNT = 8'b0;
 		rBUSY = 1'b0;
 		rLOST_DATA = 1'b0;
@@ -217,10 +218,10 @@ end
 always @( posedge iCLK )
 begin
 	if ( ( rRESETn1 | rRESETn2 ) == 1'b0 )
-		rSTEP_CNT <= 4'b0;
+		rSTEP_CNT <= 7'b0;
 	else
 		if ( rSTEP_SET0 != rSTEP_SET )
-			rSTEP_CNT <= 4'd15;
+			rSTEP_CNT <= 7'd64;	// (наше) 4 мкс
 		else
 			if ( rSTEP_CNT > 0 )
 				rSTEP_CNT <= rSTEP_CNT - 1'b1;
@@ -375,6 +376,8 @@ else
 					end
 			TYPE1:	case ( rSTAGE )
 						0:	begin
+								rSEEK_ERROR <= 1'b0;	// (наше) «updated or cleared for the new command»
+								rCRC_ERROR <= 1'b0;	// (наше)
 								rBUSY <= 1'b1;	// установка ЗАНЯТО
 								rDRQ_R_CMD <= 1'b1;	// сброс DRQ
 								rINTRQ_R_CMD <= ~rINTRQ_R_CMD;	// сброс INTRQ
@@ -388,11 +391,11 @@ else
 						2:	if ( rREG_CMD[6] == 1'b1 )	// шаг вперед или шаг назад
 								begin
 									rDIRC <= ~rREG_CMD[5];
-									rSTAGE <= 31;
+									rSTAGE <= ( ~rREG_CMD[5] != rDIRC ) ? 6'd34 : 6'd31;	// (наше) выдержка, если направление меняется
 								end
 							else
 								rSTAGE <= rSTAGE + 1'b1;
-						3:	if ( rREG_CMD[7:5] == 3'b001 )	// шаг
+						3:	if ( rREG_CMD[7:5] == 3'b001 )	// шаг: направление прежнее, выдержка не нужна
 								rSTAGE <= 31;
 							else
 								rSTAGE <= rSTAGE + 1'b1;
@@ -410,13 +413,25 @@ else
 								rSTAGE <= rSTAGE + 1'b1;
 							end
 						7:	if ( rREG_TRK == rREG_SHF )
-								rSTAGE <= 16;
+								if ( rREG_CMD[7:4] == 4'b0000 )	// (наше) Restore дошёл до 0 счётом, TR00 так и нет:
+									begin						// 255 шагов -- ошибка поиска, конец (паспорт, с. 9)
+										rSEEK_ERROR <= 1'b1;
+										rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
+										rSTAGE <= 30;
+									end
+								else
+									rSTAGE <= 16;
 							else
 								rSTAGE <= rSTAGE + 1'b1;
 						8:	begin
 								rDIRC <= rREG_TRK < rREG_SHF;
 								//rSTAGE <= rSTAGE + 1'b1;
-								rSTAGE <=  32;
+								// (наше) выдержка направления -- только если оно меняется: иначе
+								// она ложилась на каждый шаг поиска и темп был на 0,25 мс длиннее
+								if ( ( rREG_TRK < rREG_SHF ) != rDIRC )
+									rSTAGE <=  32;
+								else
+									rSTAGE <= 9;
 							end
 						9: 	begin
 								if ( rDIRC == 1'b1 )
@@ -436,7 +451,7 @@ else
 								rSTEP_SET <= ~rSTEP_SET;
 								rSTAGE <= rSTAGE + 1'b1;
 							end
-						12: if ( rSTEP_CNT == 4'd1 )
+						12: if ( rSTEP_CNT == 7'd1 )
 								rSTAGE <= rSTAGE + 1'b1;
 						13: begin
 								rDELAY_SET <= ~rDELAY_SET;
@@ -475,7 +490,7 @@ else
 									rHEAD_IN_POS <= 1'b1;
 									rSTAGE <= rSTAGE + 1'b1;
 								end
-						20: if ( oIP_CNT == 9 )
+						20: if ( oIP_CNT >= 5 )	// (наше) паспорт: «within 5 revolutions» (было 9)
 								begin
 									rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
 									rSEEK_ERROR <= 1'b1;
@@ -542,14 +557,27 @@ else
 						32: begin
 								rDELAY_SET <= ~rDELAY_SET;
 								rCNT_AMNT <= 3;
-								rSTAGE <= rSTAGE + 1'b1;
+								rSTAGE <= 37;	// (наше) через проходную стадию, было 33
 							end
 						33: if ( rDELAY_CNT == 8'd1 )	rSTAGE <= 9;
+						37: rSTAGE <= 33;	// (наше) счётчик задержки загружается тактом позже, иначе
+											// старая единица в нём проскакивала выдержку сразу
+						// (наше) Step, Step-In, Step-Out: направление ставится за 2-3 отсчёта
+						// (0,25-0,4 мс) до первого импульса, как у поиска (32-33). Паспорт:
+						// TDIR 12 мкс, на CLK 1 МГц -- 24. Было -- импульс через 0,4 мкс.
+						34: begin
+								rDELAY_SET <= ~rDELAY_SET;
+								rCNT_AMNT <= 3;
+								rSTAGE <= rSTAGE + 1'b1;
+							end
+						35: rSTAGE <= rSTAGE + 1'b1;	// счётчик задержки загружается тактом позже
+						36: if ( rDELAY_CNT == 8'd1 )	rSTAGE <= 31;
 						//
 						default:	rCURR_STATE <= IDLE;
 					endcase
 			TYPE2:	case ( rSTAGE )
 						0:	begin
+								rCRC_ERROR <= 1'b0;					// (наше) «updated or cleared for the new command»
 								rBUSY <= 1'b1;							// установка ЗАНЯТО
 								rDRQ_R_CMD <= 1'b1;					// сброс DRQ
 								rINTRQ_R_CMD <= ~rINTRQ_R_CMD;	// сброс INTRQ
@@ -663,13 +691,27 @@ else
 										rSTAGE <= 7;
 									end
 						17:	if ( rREG_CMD[5] == 1'b0 )	// чтение сектора(ов)
-								rSTAGE <= rSTAGE + 1'b1;
+								begin
+									rDAM_CNT <= 6'd0;	// (наше)
+									rSTAGE <= rSTAGE + 1'b1;
+								end
 							else
 								rSTAGE <= 29;	// к записи сектора
 						18:	if ( iSYNC == 1'b1 )
 								begin
 									oRESET_CRC <= 1'b1;
 									rSTAGE <= rSTAGE + 1'b1;
+								end
+							else if ( iBYTE_2_READ == 1'b1 )	// (наше) метка данных -- не дальше 43 байт
+								begin							// от CRC поля адреса (паспорт, с. 10):
+									if ( rDAM_CNT >= 6'd43 )	// иначе «сектор не найден» и конец.
+										begin					// Было -- ждал любую следующую метку и
+											rREC_NOT_FOUND <= 1'b1;	// читал чужой сектор как свой
+											rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
+											rSTAGE <= 60;
+										end
+									else
+										rDAM_CNT <= rDAM_CNT + 1'b1;
 								end
 						19:	begin
 								oRESET_CRC <= 1'b0;
@@ -685,7 +727,12 @@ else
 											rSTAGE <= rSTAGE + 1'b1;
 										end
 									else
-										if ( oIP_CNT >= 5 )	rSTAGE <= 7;
+										if ( iBYTE_CNT == 11'd4 )	// (наше) за синхромаркером не метка данных
+											begin				// (например FE следующего поля адреса) --
+												rREC_NOT_FOUND <= 1'b1;	// «сектор не найден» и конец
+												rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
+												rSTAGE <= 60;
+											end
 							end
 						20:	if ( iBYTE_2_READ == 1'b1 )
 								begin
@@ -860,7 +907,10 @@ else
 									if ( rDRQ == 1'b0 )
 										oMAIN_2_BYTE <= rREG_DAT;
 									else
-										oMAIN_2_BYTE <= 8'b0;
+										begin
+											oMAIN_2_BYTE <= 8'b0;
+											rLOST_DATA <= 1'b1;	// (наше) паспорт: ноль и «потеря данных»
+										end
 									rSEC_LEN <= rSEC_LEN - 1'b1;
 									rSTAGE <= rSTAGE + 1'b1;
 								end
@@ -915,6 +965,7 @@ else
 					endcase
 			TYPE3RD:	case ( rSTAGE )
 							0:	begin
+									rCRC_ERROR <= 1'b0;					// (наше) «updated or cleared for the new command»
 									rBUSY <= 1'b1;							// установка ЗАНЯТО
 									rDRQ_R_CMD <= 1'b1;					// сброс DRQ
 									rINTRQ_R_CMD <= ~rINTRQ_R_CMD;	// сброс INTRQ
@@ -1086,7 +1137,7 @@ else
 							5:	if ( rWRPT2 == 1'b1 )	// WPRT 
 									begin
 										rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
-										rSTAGE <= 17;	// выход
+										rSTAGE <= 19;	// (наше) выход; было 17 -- там сравнение с устаревшим rIPTRG0
 									end
 								else
 									rSTAGE <= rSTAGE + 1'b1;
@@ -1094,19 +1145,29 @@ else
 									rDRQ_S_CMD <= 1'b1;
 									rDELAY_SET <= ~rDELAY_SET;
 									rCNT_AMNT <= 8'd2;
+									rIPTRG0 <= rIPTRG;	// (наше) для ожидания первого байта до индекса
 									rSTAGE <= rSTAGE + 1'b1;
 								end
 							7: begin
 									rDRQ_S_CMD <= 1'b0;
 									rSTAGE <= rSTAGE + 1'b1;
 								end
-							8: if ( rPREDELAY_CNT == 11'b11000000000 )	// задержка 3 байта
+							// (наше) первый байт ждём до индекса, а не 3 байта (паспорт, с. 13:
+							// «If the DR has not been loaded by the time the index pulse is
+							// encountered the operation is terminated»); было -- 96 мкс
+							8: if ( rDRQ == 1'b0 )
 									rSTAGE <= rSTAGE + 1'b1;
+								else if ( rIPTRG0 != rIPTRG )
+									begin
+										rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
+										rLOST_DATA <= 1'b1;
+										rSTAGE <= 19;	// выход
+									end
 							9:	if ( rDRQ != 1'b0 )
 									begin
 										rINTRQ_S_CMD <= ~rINTRQ_S_CMD;
 										rLOST_DATA <= 1'b1;
-										rSTAGE <= 17;	// выход
+										rSTAGE <= 19;	// (наше) выход; было 17
 									end
 								else
 									begin
