@@ -1,13 +1,18 @@
 # FDC1793-Emul — fork with fixes against the FD179X-01 data sheet
 
 This fork keeps the core of [solegstar/FDC1793-Emul](https://github.com/solegstar/FDC1793-Emul)
-and fixes what we found while putting it into a Vector-06C expansion board and
-a Vector-06C replica on a Terasic DE1. On real hardware, with the start-up
-changes below, the core boots MicroDOS, reads and writes a Gotek and a 3.5"
-drive, formats disks (`FORMAT`) and copies them (`PIP`). The Read Track and
-data sheet fixes have passed the test benches and still wait for a hardware
-run. Every change in the original files is marked `(наше)` ("ours") in the
-code. The original README follows below.
+and fixes what I found while putting it into a Vector-06C expansion board and
+a Vector-06C replica on a Terasic DE1. Every change in the original files is
+marked `(моё)` ("mine") in the code. The original README follows below.
+
+Tested on real hardware: the DE1 replica with MicroDOS T-34, a Gotek and a
+3.5" drive on a PC floppy cable, `fdc_core.v` with `mfm_wr.v`.
+- With all the changes below, MicroDOS boots from the Gotek.
+- `FORMAT` formats the 3.5" disk with no errors, both without precompensation
+  and with 250 ns. After each track it reads every sector back.
+- `PIP B:=A:*.*[V]` copies files to the 3.5" disk and reads them back with no
+  errors.
+- Read Track has only been run in the test benches so far.
 
 The reference was the Western Digital FD179X-01 data sheet, October 1979:
 https://www.bitsavers.org/components/westernDigital/FD179X-01_Data_Sheet_Oct1979.pdf.
@@ -86,7 +91,7 @@ revolution instead of about 390. `fdc_emul.v` now starts the decoder with
   does.
 - The core runs its state machine at 16 MHz, against 1 MHz in the chip. A
   command that does not touch the disk holds BUSY for about 500 ns. A host
-  that polls status may never see BUSY, so stretch it outside (we use 50 us).
+  that polls status may never see BUSY, so stretch it outside (I use 50 us).
 
 Not checked: Force Interrupt on READY (I0, I1), FM (single density),
 multi-sector write.
