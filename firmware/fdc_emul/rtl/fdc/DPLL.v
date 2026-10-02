@@ -19,7 +19,7 @@ reg		[4:0]	w288;
 initial
 begin
 	oRCLK = 1'b0;
-	w288 = 5'd0;	// (наше) индекс в таблицу: без этого mem[{~oRAWR, X}] = X
+	w288 = 5'd0;	// (моё) индекс в таблицу: без этого mem[{~oRAWR, X}] = X
 end
 //
 always @( posedge iCLK )
@@ -38,7 +38,7 @@ else
 assign oRAWR = rRDDT1 & rRDDT2 & ~iVFOE;
 //
 
-(* romstyle = "logic" *)   // (наше) Quartus: в логику, а не в M4K -- в реплике на DE1 они все заняты
+(* romstyle = "logic" *)   // (моё) Quartus: в логику, а не в M4K -- в реплике на DE1 они все заняты
 reg [7:0] mem[0:63];
 initial begin
   $readmemh ("DPLL.hex", mem, 0);
