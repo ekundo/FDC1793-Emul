@@ -36,7 +36,12 @@ New outputs of `Main_CTRL.v`:
 - `oRDTRK` -- Read Track is running past the index.
 
 `DPLL.v`: the separator table is kept in logic (`romstyle = "logic"`), so
-Quartus does not spend an M4K block on it.
+Quartus does not spend an M4K block on it. The table itself now lives in
+`DPLL.v` as a `case`, not in `$readmemh ("DPLL.hex")`: the file is looked up
+relative to the synthesis working directory, and Synplify in Lattice Diamond
+did not find it -- the table came out empty and the whole read path was
+silently optimised away. The values are the same as in `DPLL.hex`, which is
+kept as their source.
 
 Read Track returns the gaps, as the data sheet says ("Gaps are included in
 the input data stream"). The decoder used to stay silent until the first
