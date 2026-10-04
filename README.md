@@ -12,7 +12,10 @@ Tested on real hardware: the DE1 replica with MicroDOS T-34, a Gotek and a
   and with 250 ns. After each track it reads every sector back.
 - `PIP B:=A:*.*[V]` copies files to the 3.5" disk and reads them back with no
   errors.
-- Read Track has only been run in the test benches so far.
+- Read Track was compared with a real chip: the same disk and track read by
+  TESTDISK on a Vector-06C multicard with a Fujitsu MB8877 (a WD1793 clone).
+  From the first ID address mark on, both match byte for byte. The one
+  difference is fixed below (the first A1 of a sync triple).
 
 The reference was the Western Digital FD179X-01 data sheet, October 1979:
 https://www.bitsavers.org/components/westernDigital/FD179X-01_Data_Sheet_Oct1979.pdf.
@@ -56,6 +59,13 @@ revolution instead of about 390. `fdc_emul.v` now starts the decoder with
 | Write Track: waited 3 bytes (96 us) for the first byte | waits until the index pulse |
 | Write Track: exit on Lost Data or Write Protect went through stage 17, which compared with an index flag left from the previous command | goes straight to the end of the command |
 
+Against a real chip (`MFMDEC.v`, `MFMCDR.v`):
+
+| was | now |
+|---|---|
+| Read Track returned all three `A1` of a sync mark | the first `A1` is not returned, as on the MB8877: `00 ×12, A1 A1 FB`. A byte of the old framing that completes before the missing clock is returned, as the MB8877's `00 14 A1 A1 FE` (`14` = three zero bits and five bits of `A1`). New input `iRDTRK`; other commands are unchanged |
+| `F6` in Write Track: the clock of `C2` was dropped before bit 2, as for `A1`, so the index mark came out as `5284` | dropped before bit 3, `5224` ("missing clock transition between bits 3 and 4"). The core's own address mark detector looks for `5224` and did not recognise its own index marks. Also fixed in `mfm_wr.v` |
+
 ## Additions
 
 - `firmware/fdc_emul/rtl/fdc_core.v` -- a top level for use inside an FPGA, in
@@ -74,7 +84,8 @@ revolution instead of about 390. `fdc_emul.v` now starts the decoder with
 - `firmware/fdc_emul/sim/` -- Icarus Verilog test benches, started with
   `sh firmware/fdc_emul/sim/run.sh`:
   - `tb_fdc1793.v` -- the core through `fdc_emul.v`: reset, Restore, Seek,
-    Read/Write Sector on a model disk, Write Track, Read Address, Read Track,
+    Read/Write Sector on a model disk, Write Track (including the cells of the
+    `C2` index mark), Read Address, Read Track (two `A1` before each mark),
     Force Interrupt.
   - `tb_fd179x.v` -- the data sheet section by section through `fdc_core.v`:
     status bits, step rates, Step/Step-In/Step-Out and `u`, verify, head
