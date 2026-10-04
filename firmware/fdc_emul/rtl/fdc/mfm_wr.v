@@ -59,8 +59,13 @@ reg [5:0] rWDATA_CNT   = TWO_mks;
 reg       rMFM_CNT     = 1'b0;
 reg       rLAST        = 1'b0;        // предыдущий бит данных (rLASTBITS[0] у MFMCDR)
 reg [7:0] rMAIN_2_BYTE = 8'h4E;
-wire      wMFM_MSK = ~(iTRANSLATE && (rBIT_CNT == 3'd2) &&
-                       ((rMAIN_2_BYTE == 8'hA1) || (rMAIN_2_BYTE == 8'hC2)));
+// Выбитый такт: у A1 -- перед разрядом 2 (4489), у C2 -- перед разрядом 3
+// (5224, паспорт: «missing clock transition between bits 3 and 4», счёт от
+// старшего). У MFMCDR оба -- перед разрядом 2, и индексная метка C2 выходила
+// 5284: её не узнавал ни детектор ядра (AMD.v ищет 5224), ни MB8877 (03.10.2026).
+wire      wMFM_MSK = ~(iTRANSLATE &&
+                       (((rBIT_CNT == 3'd2) && (rMAIN_2_BYTE == 8'hA1)) ||
+                        ((rBIT_CNT == 3'd3) && (rMAIN_2_BYTE == 8'hC2))));
 
 // fin: байт начат при взведённом WG и ещё не дописан. Конец байта -- перенос
 // интервала после ячейки данных бита 0 (rMFM_CNT = 1, rBIT_CNT уже 7).

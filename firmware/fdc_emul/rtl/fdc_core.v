@@ -124,7 +124,7 @@ AMD U16 (.iCLK(clk_16), .iRCLK(rclk), .iRAWR(rawr), .iVFOE(vfoe), .iIP_CNT(ip_cn
 // WD1793, которая отдаёт и промежутки (кадр до первой метки произвольный,
 // на каждой метке подстраивается). Без этого 28 байт от индекса до поля
 // адреса пропадали (tb_fdc1793.v, раздел 10).
-MFMDEC U17 (.iCLK(clk_16), .iRCLK(rclk), .iVFOE(vfoe), .iSTART(start | rdtrk), .iSYNC(sync),
+MFMDEC U17 (.iCLK(clk_16), .iRCLK(rclk), .iVFOE(vfoe), .iSTART(start | rdtrk), .iSYNC(sync), .iRDTRK(rdtrk),
             .i3WORDS(words), .oBYTE_2_MAIN(byte_2_main), .oBYTE_2_READ(byte_2_read));
 
 CRC16_D8 U19 (.iCLK(clk_16), .iRESET_CRC(reset_crc), .iBYTE_2_MAIN(byte_2_main),

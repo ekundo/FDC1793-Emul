@@ -188,6 +188,7 @@ MFMDEC U17 (
 	.iRCLK	( rclk ),
 	.iVFOE	( vfoe ),
 	.iSTART	( start | rdtrk ),	// (моё) Read Track отдаёт и промежутки, как WD1793
+	.iRDTRK	( rdtrk ),	// (моё) метка A1 в Read Track -- как у живой микросхемы
 	.iSYNC	( sync ),
 	.i3WORDS	( words ),
 	.oBYTE_2_MAIN	( byte_2_main ),

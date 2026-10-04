@@ -570,8 +570,14 @@ initial begin
     // (format.com МикроДОС выдаёт F0 и F4). Служебные байты подставляет САМО ЯДРО:
     // F5 -> A1 с выбитым тактовым разрядом и заводом CRC, F6 -> C2, F7 -> два
     // байта CRC. Проверяем именно подстановку, а не то, что команда прошла.
+    // Индексная метка F6 F6 F6 FC (C2 с выбитым тактом) -- как пишет FORMAT;
+    // длина до первого F5 та же, 44 байта, иначе образ не влезет в оборот.
     tp = 0;
-    for (gi = 0; gi < 32; gi = gi + 1) trk_img[tp+gi] = 8'h4E;   tp = tp + 32;
+    for (gi = 0; gi < 8;  gi = gi + 1) trk_img[tp+gi] = 8'h4E;   tp = tp + 8;
+    for (gi = 0; gi < 8;  gi = gi + 1) trk_img[tp+gi] = 8'h00;   tp = tp + 8;
+    trk_img[tp] = 8'hF6; trk_img[tp+1] = 8'hF6; trk_img[tp+2] = 8'hF6; tp = tp + 3;
+    trk_img[tp] = 8'hFC;                                        tp = tp + 1;
+    for (gi = 0; gi < 12; gi = gi + 1) trk_img[tp+gi] = 8'h4E;   tp = tp + 12;
     for (gi = 0; gi < 12; gi = gi + 1) trk_img[tp+gi] = 8'h00;   tp = tp + 12;
     trk_img[tp] = 8'hF5; trk_img[tp+1] = 8'hF5; trk_img[tp+2] = 8'hF5; tp = tp + 3;
     trk_img[tp] = 8'hFE;                                        tp = tp + 1;
@@ -627,6 +633,23 @@ initial begin
              dec_byte[5], dec_byte[6], dec_byte[7], dec_byte[8], dec_byte[9]);
         `CHECK("F5 F5 F5 превратились в A1 A1 A1",
                n_dec > 10 && dec_byte[0] === 8'hA1 && dec_byte[1] === 8'hA1 && dec_byte[2] === 8'hA1);
+    // F6 -> C2 с выбитым тактом перед разрядом 3: в ячейках 5224 (паспорт:
+    // «missing clock transition between bits 3 and 4»). У MFMCDR было 5284 --
+    // такую метку не узнаёт ни детектор ядра, ни живая микросхема.
+    begin : iam
+        integer i, k, n5224, n5284;
+        reg [47:0] w;
+        n5224 = 0; n5284 = 0;
+        for (i = 0; i + 48 <= n_cells; i = i + 1) begin
+            w = 48'h0;
+            for (k = 0; k < 48; k = k + 1) w = {w[46:0], cells[i+k]};
+            if (w == 48'h522452245224) n5224 = n5224 + 1;
+            if (w[15:0] == 16'h5284) n5284 = n5284 + 1;
+        end
+        $display("   индексная метка: троек 5224 -- %0d, слов 5284 -- %0d", n5224, n5284);
+        `CHECK("F6 F6 F6 записаны как три C2 с выбитым тактом (5224 5224 5224)", n5224 === 1);
+        `CHECK("и нет C2 с тактом, выбитым не там (5284)", n5284 === 0);
+    end
         `CHECK("метка адреса FE на месте", n_dec > 10 && dec_byte[3] === 8'hFE);
         `CHECK("номера дорожки, стороны, сектора и длины легли верно",
                n_dec > 10 && dec_byte[4] === 8'd7 && dec_byte[5] === 8'd0
@@ -760,60 +783,72 @@ initial begin
     begin : rt_check
         integer i, j, k, id_at, dm_at, n_id, bad_d;
         reg [15:0] c;
+        // Синхрометка -- как у живой микросхемы (MB8877, клон WD1793, снято
+        // 03.10.2026 на той же дорожке): первый A1 тройки не отдаётся, на нём
+        // встаёт кадр. Перед FE и FB видно ДВА A1; CRC считается по трём,
+        // первый -- подразумеваемый. id_at и dm_at -- на первом видимом A1.
         id_at = -1; dm_at = -1; n_id = 0;
-        for (i = 0; i + 3 < got; i = i + 1)
-            if (trk_img[i] === 8'hA1 && trk_img[i+1] === 8'hA1 &&
-                trk_img[i+2] === 8'hA1 && trk_img[i+3] === 8'hFE) begin
+        for (i = 0; i + 2 < got; i = i + 1)
+            if (trk_img[i] === 8'hA1 && trk_img[i+1] === 8'hA1 && trk_img[i+2] === 8'hFE) begin
                 n_id = n_id + 1;
                 if (id_at < 0) id_at = i;
             end
         if (id_at >= 0)
-            for (i = id_at + 4; i + 3 < got && dm_at < 0; i = i + 1)
-                if (trk_img[i] === 8'hA1 && trk_img[i+1] === 8'hA1 &&
-                    trk_img[i+2] === 8'hA1 && trk_img[i+3] === 8'hFB) dm_at = i;
-        $display("   A1 A1 A1 FE на %0d, A1 A1 A1 FB на %0d, байт до первой метки %0d",
+            for (i = id_at + 3; i + 2 < got && dm_at < 0; i = i + 1)
+                if (trk_img[i] === 8'hA1 && trk_img[i+1] === 8'hA1 && trk_img[i+2] === 8'hFB) dm_at = i;
+        $display("   A1 A1 FE на %0d, A1 A1 FB на %0d, байт до первой метки %0d",
                  id_at, dm_at, id_at);
         $write("   до метки:");
         for (i = 0; i < id_at && i < 48; i = i + 1) $write(" %02h", trk_img[i]);
         $display("");
-        `CHECK("поле адреса A1 A1 A1 FE найдено", id_at >= 0);
+        if (dm_at >= 0) begin
+            $write("   перед меткой данных:");
+            for (i = dm_at - 4; i < dm_at + 3; i = i + 1) $write(" %02h", trk_img[i]);
+            $display("");
+        end
+        `CHECK("поле адреса A1 A1 FE найдено", id_at >= 0);
         `CHECK("ровно одно: прочитан ровно один оборот", n_id === 1);
+        `CHECK("перед FE ровно два A1: первый A1 тройки не отдан",
+               id_at > 0 && trk_img[id_at-1] !== 8'hA1);
         // Промежутки отдаются, как у WD1793 (паспорт FD179X-01, октябрь 1979,
         // с. 13: «Gaps are included in the input data stream», кадр байтов
         // подстраивается по каждой метке): до первой метки кадр произвольный
         // (16 x 4E приходят сдвинутыми), на метке встаёт на место. До 02.10.2026
         // декодер молчал до первой метки и 28 байт пропадали -- починено
         // признаком oRDTRK из Main_CTRL (моё), см. fdc_core.v.
-        `CHECK("промежуток до первой метки выдан: 16 x 4E и 12 x 00, не меньше 28 байт", id_at >= 28);
+        `CHECK("промежуток до первой метки выдан: 16 x 4E и 12 x 00, не меньше 27 байт", id_at >= 27);
         // Оборот модели: индекс 500 мкс + 374 байта по 32 мкс = 12,468 мс, то
-        // есть 389,6 байта.
-        `CHECK("за оборот 387..392 байта -- весь оборот, а не с первой метки", got >= 387 && got <= 392);
+        // есть 389,6 байта; два A1 (поле адреса и метка данных) не отдаются, а
+        // байт старого кадра перед первой меткой может прийти лишним.
+        `CHECK("за оборот 385..391 байт -- весь оборот без двух первых A1", got >= 385 && got <= 391);
         if (id_at >= 0) begin
             `CHECK("дорожка, сторона, сектор, длина -- как на носителе",
-                   trk_img[id_at+4] === TRK_ON_DISK && trk_img[id_at+5] === SIDE_ON_DISK &&
-                   trk_img[id_at+6] === SEC_ON_DISK && trk_img[id_at+7] === 8'h01);
+                   trk_img[id_at+3] === TRK_ON_DISK && trk_img[id_at+4] === SIDE_ON_DISK &&
+                   trk_img[id_at+5] === SEC_ON_DISK && trk_img[id_at+6] === 8'h01);
             c = 16'hFFFF;
-            for (j = id_at; j < id_at + 8; j = j + 1) begin
-                c = c ^ {trk_img[j], 8'h00};
+            for (j = id_at - 1; j < id_at + 7; j = j + 1) begin
+                c = c ^ {((j < id_at) ? 8'hA1 : trk_img[j]), 8'h00};
                 for (k = 0; k < 8; k = k + 1) c = c[15] ? {c[14:0],1'b0} ^ 16'h1021 : {c[14:0],1'b0};
             end
-            `CHECK("CRC поля адреса верная", {trk_img[id_at+8], trk_img[id_at+9]} === c);
+            `CHECK("CRC поля адреса верная (по A1 A1 A1 FE)", {trk_img[id_at+7], trk_img[id_at+8]} === c);
         end
-        `CHECK("метка данных A1 A1 A1 FB найдена", dm_at >= 0);
+        `CHECK("метка данных A1 A1 FB найдена", dm_at >= 0);
         if (dm_at >= 0) begin
+            `CHECK("перед FB ровно два A1, а до них синхронули -- кадр уже стоял",
+                   trk_img[dm_at-1] === 8'h00);
             bad_d = 0;
             for (j = 0; j < 256; j = j + 1)
-                if (dm_at + 4 + j >= got || trk_img[dm_at+4+j] !== sector_data[j]) bad_d = bad_d + 1;
+                if (dm_at + 3 + j >= got || trk_img[dm_at+3+j] !== sector_data[j]) bad_d = bad_d + 1;
             `CHECK("все 256 байт данных верны", bad_d === 0);
             c = 16'hFFFF;
-            for (j = dm_at; j < dm_at + 4 + 256; j = j + 1) begin
-                c = c ^ {trk_img[j], 8'h00};
+            for (j = dm_at - 1; j < dm_at + 3 + 256; j = j + 1) begin
+                c = c ^ {((j < dm_at) ? 8'hA1 : trk_img[j]), 8'h00};
                 for (k = 0; k < 8; k = k + 1) c = c[15] ? {c[14:0],1'b0} ^ 16'h1021 : {c[14:0],1'b0};
             end
-            `CHECK("CRC поля данных верная",
-                   dm_at + 261 < got && {trk_img[dm_at+260], trk_img[dm_at+261]} === c);
+            `CHECK("CRC поля данных верная (по A1 A1 A1 FB и данным)",
+                   dm_at + 260 < got && {trk_img[dm_at+259], trk_img[dm_at+260]} === c);
             `CHECK("после данных прочитан промежуток 4E до индекса",
-                   dm_at + 262 < got && trk_img[dm_at+262] === 8'h4E);
+                   dm_at + 261 < got && trk_img[dm_at+261] === 8'h4E);
         end
     end
 

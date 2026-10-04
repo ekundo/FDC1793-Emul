@@ -77,8 +77,11 @@ else
 			end
 	end
 //
-assign wMFM_MSK = ~( ( iTRANSLATE == 1'b1 ) && ( rBIT_CNT == 3'd2 ) &&
-			( ( rMAIN_2_BYTE == 8'hA1 ) || ( rMAIN_2_BYTE == 8'hC2 ) ) );
+// (моё) у C2 такт выбит перед разрядом 3 (5224), а не 2, как у A1 (4489):
+// было -- оба перед разрядом 2, и индексная метка выходила 5284
+assign wMFM_MSK = ~( ( iTRANSLATE == 1'b1 ) &&
+			( ( ( rBIT_CNT == 3'd2 ) && ( rMAIN_2_BYTE == 8'hA1 ) ) ||
+			  ( ( rBIT_CNT == 3'd3 ) && ( rMAIN_2_BYTE == 8'hC2 ) ) ) );
 //
 always @( posedge iCLK )
 if ( ( iBYTE_2_WRITE == 1'b1 ) || ( iWG == 1'b0 ) )
