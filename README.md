@@ -61,6 +61,7 @@ revolution instead of about 390. `fdc_emul.v` now starts the decoder with
 | no data mark after the ID field: took the next sector's data mark and returned its 256 bytes with a CRC error | data mark must come within 43 bytes, otherwise Record Not Found |
 | Write Sector: a missed byte written as zero, no status bit | zero and Lost Data |
 | Seek Error and CRC Error carried over to the next command | cleared at the start of a new command |
+| a command written while busy aborted the running one: Restore after reset stopped mid-way and left the track register at 252, so the next read or write got Record Not Found | while busy only Force Interrupt is accepted, as the data sheet says |
 | Write Track: waited 3 bytes (96 us) for the first byte | waits until the index pulse |
 | Write Track: exit on Lost Data or Write Protect went through stage 17, which compared with an index flag left from the previous command | goes straight to the end of the command |
 
